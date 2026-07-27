@@ -36,9 +36,6 @@ Detalhamento técnico completo: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 ---
 
 ## Rodando o projeto localmente
-
-Guia passo a passo completo, incluindo troubleshooting de ambiente Windows: [`docs/SETUP.md`](docs/SETUP.md)
-
 Resumo rápido:
 
 ```bash
