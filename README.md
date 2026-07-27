@@ -1,6 +1,6 @@
 # MenuZap
 
-> Micro-SaaS de cardápio digital para pequenos estabelecimentos. O cliente monta o pedido numa vitrine com UX de nível iFood; ao finalizar, o pedido é organizado automaticamente e enviado direto para o WhatsApp do estabelecimento. Sem marketplace, sem taxa por pedido, sem app para instalar.
+> Micro-SaaS de cardápio digital para pequenos estabelecimentos. O cliente monta o pedido numa vitrine com UX pensado em facilidade de navegação; ao finalizar, o pedido é organizado automaticamente e enviado direto para o WhatsApp do estabelecimento. Sem marketplace, sem taxa por pedido, sem app para instalar.
 
 ---
 
@@ -118,9 +118,3 @@ git push
 
 ---
 
-## Documentação completa
-
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — schema do banco, rotas, middlewares, estratégia de cache, segurança
-- [`docs/CHECKPOINT.md`](docs/CHECKPOINT.md) — toda decisão tomada, fase por fase, incluindo o porquê de cada uma
-- [`docs/SETUP.md`](docs/SETUP.md) — setup do ambiente de desenvolvimento (VS Code, extensões, Supabase)
-- [`docs/GIT_WORKFLOW.md`](docs/GIT_WORKFLOW.md) — branches, commits, rollback
