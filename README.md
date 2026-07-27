@@ -1,58 +1,126 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# MenuZap
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+> Micro-SaaS de cardápio digital para pequenos estabelecimentos. O cliente monta o pedido numa vitrine com UX de nível iFood; ao finalizar, o pedido é organizado automaticamente e enviado direto para o WhatsApp do estabelecimento. Sem marketplace, sem taxa por pedido, sem app para instalar.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Status atual
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+| Etapa | Status |
+|---|---|
+| Planejamento (Fases 1–10) | ✅ Concluído |
+| Sprint 1 — Fundação, multi-tenant, auth | ✅ Concluído e testado (9 testes automatizados) |
+| Sprint 2 — Painel do lojista | 🚧 Em andamento (Partes 1 e 2 de 4 entregues) |
+| Sprint 3 — Vitrine pública | ⏳ Não iniciado |
+| Sprint 4 — Carrinho e checkout | ⏳ Não iniciado |
+| Sprint 5 — Super admin e deploy | ⏳ Não iniciado |
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Histórico completo de decisões, fase a fase: [`docs/CHECKPOINT.md`](docs/CHECKPOINT.md)
 
-## Learning Laravel
+---
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Stack
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+| Camada | Tecnologia |
+|---|---|
+| Backend | Laravel 11 (PHP 8.2+), Eloquent, Sanctum |
+| Vitrine pública | Blade + Alpine.js |
+| Painel do lojista/admin | Vue 3 + Inertia.js, Shadcn-Vue, Tailwind v4 |
+| Banco de dados | PostgreSQL via Supabase |
+| Cache / fila | Redis (produção) |
+| Storage de imagens | Cloudflare R2 |
+| Deploy | Coolify em VPS Hetzner |
+| Testes | Pest |
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+Detalhamento técnico completo: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
-## Agentic Development
+---
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Rodando o projeto localmente
+
+Guia passo a passo completo, incluindo troubleshooting de ambiente Windows: [`docs/SETUP.md`](docs/SETUP.md)
+
+Resumo rápido:
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+npm install
+cp .env.example .env
+php artisan key:generate
+# preencher credenciais do Supabase no .env
+php artisan migrate
+php artisan db:seed --class=PlanSeeder
+php artisan storage:link
+php artisan serve
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Em outro terminal:
 
-## Contributing
+```bash
+npm run dev
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Acesse `http://127.0.0.1:8000/register` para criar a primeira loja de teste.
 
-## Code of Conduct
+---
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Rodando os testes
 
-## Security Vulnerabilities
+```bash
+php artisan test
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Os testes rodam contra o Postgres real (Supabase), dentro de transações com rollback automático — nada fica gravado no banco após a suíte terminar. Veja `tests/Feature/TenantIsolationTest.php` para a suíte de isolamento multi-tenant.
 
-## License
+---
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Estrutura do projeto
+
+```
+app/
+├── Http/Controllers/     Controllers da vitrine, painel e auth
+├── Http/Middleware/      Identificação de tenant (2 middlewares distintos — ver docs/ARCHITECTURE.md)
+├── Models/                13 Models Eloquent, multi-tenant via Global Scope
+├── Jobs/                  Processamento assíncrono (imagens, etc.)
+└── Support/                TenantContext — o núcleo do isolamento multi-tenant
+
+resources/
+├── views/                 Blade (vitrine pública + template raiz do Inertia)
+└── js/
+    ├── Layouts/            Layout persistente do painel (sidebar, topbar, bottom nav)
+    └── Pages/              Páginas Inertia (Dashboard, Categorias, Loja...)
+
+routes/
+├── web.php                 Autenticação pública (login/registro)
+├── storefront.php          Vitrine — Blade, identificação de tenant por slug
+└── tenant.php               Painel do lojista — Inertia, identificação por sessão
+
+docs/
+├── ARCHITECTURE.md          Arquitetura técnica completa
+├── CHECKPOINT.md            Histórico de decisões, fase a fase
+├── SETUP.md                  Guia de setup do ambiente
+└── GIT_WORKFLOW.md            Estratégia de branches e versionamento
+```
+
+---
+
+## Fluxo de contribuição
+
+Uma branch por Sprint, um commit por Parte concluída e testada. Nunca commitar código que não passou pelo menos por teste manual. Detalhes completos, incluindo como reverter uma entrega quebrada: [`docs/GIT_WORKFLOW.md`](docs/GIT_WORKFLOW.md)
+
+```bash
+git checkout -b sprint-N
+# ... trabalho ...
+git add .
+git commit -m "feat: Sprint N Parte X — descrição"
+git push
+```
+
+---
+
+## Documentação completa
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — schema do banco, rotas, middlewares, estratégia de cache, segurança
+- [`docs/CHECKPOINT.md`](docs/CHECKPOINT.md) — toda decisão tomada, fase por fase, incluindo o porquê de cada uma
+- [`docs/SETUP.md`](docs/SETUP.md) — setup do ambiente de desenvolvimento (VS Code, extensões, Supabase)
+- [`docs/GIT_WORKFLOW.md`](docs/GIT_WORKFLOW.md) — branches, commits, rollback
