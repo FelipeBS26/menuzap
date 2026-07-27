@@ -15,7 +15,6 @@
 | Sprint 4 — Carrinho e checkout | ⏳ Não iniciado |
 | Sprint 5 — Super admin e deploy | ⏳ Não iniciado |
 
-Histórico completo de decisões, fase a fase: [`docs/CHECKPOINT.md`](docs/CHECKPOINT.md)
 
 ---
 
@@ -94,27 +93,6 @@ routes/
 ├── web.php                 Autenticação pública (login/registro)
 ├── storefront.php          Vitrine — Blade, identificação de tenant por slug
 └── tenant.php               Painel do lojista — Inertia, identificação por sessão
-
-docs/
-├── ARCHITECTURE.md          Arquitetura técnica completa
-├── CHECKPOINT.md            Histórico de decisões, fase a fase
-├── SETUP.md                  Guia de setup do ambiente
-└── GIT_WORKFLOW.md            Estratégia de branches e versionamento
-```
-
----
-
-## Fluxo de contribuição
-
-Uma branch por Sprint, um commit por Parte concluída e testada. Nunca commitar código que não passou pelo menos por teste manual. Detalhes completos, incluindo como reverter uma entrega quebrada: [`docs/GIT_WORKFLOW.md`](docs/GIT_WORKFLOW.md)
-
-```bash
-git checkout -b sprint-N
-# ... trabalho ...
-git add .
-git commit -m "feat: Sprint N Parte X — descrição"
-git push
-```
 
 ---
 
