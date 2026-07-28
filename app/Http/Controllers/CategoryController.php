@@ -1,96 +1,66 @@
-<script setup>
-import { Link, router, usePage } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+<?php
 
-const page = usePage();
-const store = computed(() => page.props.store);
-const tenant = computed(() => page.props.tenant);
+namespace App\Http\Controllers;
 
-// 4 seções principais — cabe inteiro na bottom nav do mobile sem precisar
-// de menu hambúrguer (decisão da Fase 9: 1 toque é mais rápido que drawer).
-const navItems = [
-    { label: 'Dashboard', href: route('tenant.dashboard') },
-    { label: 'Cardápio', href: route('tenant.categories.index') },
-    { label: 'Adicionais', href: '#' },
-    { label: 'Configurações', href: route('tenant.store.edit') },
-];
+use App\Models\Category;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
 
-const toggling = ref(false);
+class CategoryController extends Controller
+{
+    public function index(): Response
+    {
+        return Inertia::render('Categories/Index', [
+            'categories' => Category::orderBy('sort_order')->get(),
+        ]);
+    }
 
-function toggleStore() {
-    toggling.value = true;
-    router.put(route('tenant.store.toggle'), {}, {
-        preserveScroll: true,
-        preserveState: true,
-        onFinish: () => (toggling.value = false),
-    });
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $request->validate(['name' => ['required', 'string', 'max:100']]);
+
+        $maxOrder = Category::max('sort_order') ?? 0;
+
+        Category::create([...$validated, 'sort_order' => $maxOrder + 1]);
+
+        return back();
+    }
+
+    public function update(Request $request, Category $category): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+            'is_active' => ['boolean'],
+        ]);
+
+        $category->update($validated);
+
+        return back();
+    }
+
+    public function destroy(Category $category): RedirectResponse
+    {
+        $category->delete();
+
+        return back();
+    }
+
+    public function move(Request $request, Category $category): RedirectResponse
+    {
+        $direction = $request->validate(['direction' => ['required', 'in:up,down']])['direction'];
+
+        $swap = $direction === 'up'
+            ? Category::where('sort_order', '<', $category->sort_order)->orderByDesc('sort_order')->first()
+            : Category::where('sort_order', '>', $category->sort_order)->orderBy('sort_order')->first();
+
+        if ($swap) {
+            [$category->sort_order, $swap->sort_order] = [$swap->sort_order, $category->sort_order];
+            $category->save();
+            $swap->save();
+        }
+
+        return back();
+    }
 }
-</script>
-
-<template>
-    <div class="min-h-screen bg-zinc-50">
-        <!-- Sidebar desktop -->
-        <aside class="hidden md:flex md:w-56 md:flex-col md:fixed md:inset-y-0 border-r border-zinc-200 bg-white">
-            <div class="flex items-center gap-2 px-4 h-16 border-b border-zinc-200">
-                <div class="w-7 h-7 rounded-md bg-primary flex items-center justify-center text-white text-xs font-semibold">MZ</div>
-                <span class="font-medium text-zinc-900">MenuZap</span>
-            </div>
-            <nav class="flex-1 px-3 py-4 space-y-1">
-                <Link
-                    v-for="item in navItems"
-                    :key="item.label"
-                    :href="item.href"
-                    class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-zinc-600 hover:bg-zinc-100"
-                    :class="{ 'bg-primary/10 text-primary font-medium': page.url === item.href }"
-                >
-                    {{ item.label }}
-                </Link>
-            </nav>
-        </aside>
-
-        <div class="md:pl-56">
-            <!-- Topbar -->
-            <header class="h-16 border-b border-zinc-200 bg-white flex items-center justify-between px-4 md:px-6 sticky top-0 z-10">
-                <span class="font-medium text-zinc-900 truncate">{{ store?.name }}</span>
-                <div class="flex items-center gap-3">
-                    <a
-                        v-if="tenant"
-                        :href="`/${tenant.slug}`"
-                        target="_blank"
-                        class="hidden sm:inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-zinc-300 text-zinc-600 hover:bg-zinc-50"
-                    >
-                        Ver minha loja
-                    </a>
-                    <button
-                        @click="toggleStore"
-                        :disabled="toggling"
-                        class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition disabled:opacity-60"
-                        :class="store?.is_open
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-zinc-100 text-zinc-500 border border-zinc-200'"
-                    >
-                        <span class="w-1.5 h-1.5 rounded-full" :class="store?.is_open ? 'bg-emerald-500' : 'bg-zinc-400'"></span>
-                        {{ store?.is_open ? 'Loja aberta' : 'Loja fechada' }}
-                    </button>
-                </div>
-            </header>
-
-            <main class="p-4 md:p-6 pb-20 md:pb-6">
-                <slot />
-            </main>
-        </div>
-
-        <!-- Bottom nav mobile — substitui o menu hambúrguer (Fase 9) -->
-        <nav class="md:hidden fixed bottom-0 inset-x-0 h-14 bg-white border-t border-zinc-200 flex items-center justify-around z-10">
-            <Link
-                v-for="item in navItems"
-                :key="item.label"
-                :href="item.href"
-                class="flex flex-col items-center gap-0.5 text-[11px] text-zinc-500"
-                :class="{ 'text-primary font-medium': page.url === item.href }"
-            >
-                {{ item.label }}
-            </Link>
-        </nav>
-    </div>
-</template>
