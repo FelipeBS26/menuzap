@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ProductController;
 use App\Http\Controllers\StoreController;
 use Illuminate\Support\Facades\Route;
 
@@ -16,3 +17,11 @@ Route::post('/categories', [CategoryController::class, 'store'])->name('tenant.c
 Route::put('/categories/{category}', [CategoryController::class, 'update'])->name('tenant.categories.update');
 Route::delete('/categories/{category}', [CategoryController::class, 'destroy'])->name('tenant.categories.destroy');
 Route::put('/categories/{category}/move', [CategoryController::class, 'move'])->name('tenant.categories.move');
+
+Route::get('/products', [ProductController::class, 'index'])->name('tenant.products.index');
+Route::get('/products/create', [ProductController::class, 'create'])->name('tenant.products.create');
+Route::post('/products', [ProductController::class, 'store'])->name('tenant.products.store');
+Route::get('/products/{product}/edit', [ProductController::class, 'edit'])->name('tenant.products.edit');
+Route::put('/products/{product}', [ProductController::class, 'update'])->name('tenant.products.update');
+Route::delete('/products/{product}', [ProductController::class, 'destroy'])->name('tenant.products.destroy');
+Route::post('/products/{product}/duplicate', [ProductController::class, 'duplicate'])->name('tenant.products.duplicate');
