@@ -15,7 +15,11 @@ class StorefrontController extends Controller
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->with(['products' => function ($query) {
-                $query->where('is_active', true)->orderBy('sort_order')->with('sizes');
+                $query->where('is_active', true)->orderBy('sort_order')->with([
+                    'sizes',
+                    'optionGroups' => fn ($q) => $q->where('is_active', true)->orderByPivot('sort_order'),
+                    'optionGroups.items' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order'),
+                ]);
             }])
             ->get()
             // Categoria sem nenhum produto ativo não aparece — evita seção

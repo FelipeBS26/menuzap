@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $store->name }} — Cardápio</title>
+
+    {{-- Catálogo completo embutido como JSON — o modal de personalização
+         lê daqui, sem nenhuma requisição extra ao servidor. Continua
+         compatível com o cache Redis da Parte 3: o JSON fica estático
+         dentro do HTML cacheado, junto com o resto da página. --}}
+    <script>window.__CATALOG__ = @js($categories);</script>
+
     @vite(['resources/css/app.css', 'resources/js/storefront.js'])
 
     <style>
@@ -23,7 +30,7 @@
 </head>
 <body class="antialiased bg-white text-zinc-900">
 
-<div x-data="{ activeCategory: '{{ $categories->first()?->id }}' }">
+<div x-data="storefront('{{ $categories->first()?->id }}')">
 
     <!-- Hero -->
     <header class="relative h-48 bg-gradient-to-br from-primary to-primary/70">
@@ -129,8 +136,8 @@
                                     </span>
                                     <button
                                         type="button"
+                                        @click="openModal('{{ $product->id }}')"
                                         class="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center text-base leading-none"
-                                        {{-- @click abre o modal de personalização — chega na Parte 2 --}}
                                     >+</button>
                                 </div>
                             </div>
@@ -156,6 +163,127 @@
             </span>
             <span class="text-sm font-medium" x-text="'R$ ' + ($store.cart.totalCents / 100).toFixed(2).replace('.', ',')"></span>
         </button>
+    </div>
+
+    <!-- Modal de personalização (bottom sheet) -->
+    <div x-show="open" x-cloak class="fixed inset-0 z-30 flex items-end sm:items-center sm:justify-center">
+        <div class="absolute inset-0 bg-black/50" @click="closeModal()"></div>
+
+        <div
+            x-show="open"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="translate-y-full sm:translate-y-4 sm:opacity-0"
+            x-transition:enter-end="translate-y-0 sm:opacity-100"
+            class="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[85vh] flex flex-col"
+        >
+            <template x-if="product">
+                <div class="flex flex-col overflow-hidden">
+                    <!-- Cabeçalho -->
+                    <div class="relative h-40 bg-gradient-to-br from-primary/20 to-primary/40 flex-shrink-0">
+                        <img x-show="product.image_url" :src="product.image_url" class="w-full h-full object-cover">
+                        <button @click="closeModal()" class="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center">✕</button>
+                    </div>
+
+                    <div class="p-4 overflow-y-auto flex-1">
+                        <div class="flex items-start justify-between gap-3 mb-1">
+                            <h3 class="text-base font-semibold text-zinc-900" x-text="product.name"></h3>
+                            <span class="text-base font-semibold text-primary whitespace-nowrap" x-text="formatPrice(unitPriceCents)"></span>
+                        </div>
+                        <p class="text-sm text-zinc-500 mb-4" x-text="product.description"></p>
+
+                        <!-- Tamanhos -->
+                        <template x-if="product.has_sizes">
+                            <div class="mb-5">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-medium text-zinc-900">Escolha o tamanho</span>
+                                    <span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">Obrigatório</span>
+                                </div>
+                                <div class="space-y-2">
+                                    <template x-for="size in product.sizes" :key="size.id">
+                                        <label
+                                            class="flex items-center justify-between border rounded-lg px-3 py-2 cursor-pointer"
+                                            :class="selectedSizeId === size.id ? 'border-primary bg-primary/5' : 'border-zinc-200'"
+                                        >
+                                            <span class="flex items-center gap-2 text-sm text-zinc-900">
+                                                <input type="radio" :checked="selectedSizeId === size.id" @change="selectedSizeId = size.id" class="accent-current" style="color: rgb(var(--c-primary))">
+                                                <span x-text="size.name"></span>
+                                            </span>
+                                            <span class="text-sm text-zinc-600" x-text="formatPrice(size.price_cents)"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Grupos de adicionais -->
+                        <template x-for="group in product.option_groups" :key="group.id">
+                            <div class="mb-5">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-medium text-zinc-900" x-text="group.name"></span>
+                                    <span
+                                        class="text-[11px] px-2 py-0.5 rounded-full transition-colors"
+                                        :class="isGroupValid(group)
+                                            ? 'bg-emerald-50 text-emerald-700'
+                                            : (group.pivot.min_selections > 0 ? 'bg-amber-50 text-amber-700' : 'bg-zinc-100 text-zinc-500')"
+                                        x-text="groupStatusLabel(group)"
+                                    ></span>
+                                </div>
+                                <div class="space-y-2">
+                                    <template x-for="item in group.items" :key="item.id">
+                                        <label
+                                            class="flex items-center justify-between border rounded-lg px-3 py-2 cursor-pointer"
+                                            :class="isItemSelected(group, item) ? 'border-primary bg-primary/5' : 'border-zinc-200'"
+                                        >
+                                            <span class="flex items-center gap-2 text-sm text-zinc-900">
+                                                <input
+                                                    :type="group.pivot.max_selections === 1 ? 'radio' : 'checkbox'"
+                                                    :checked="isItemSelected(group, item)"
+                                                    @change="toggleItem(group, item)"
+                                                >
+                                                <span x-text="item.name"></span>
+                                            </span>
+                                            <span class="text-xs text-zinc-500" x-text="item.price_cents > 0 ? '+ ' + formatPrice(item.price_cents) : 'Grátis'"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Observações -->
+                        <div class="mb-2">
+                            <label class="block text-sm font-medium text-zinc-900 mb-2">Observações</label>
+                            <textarea
+                                x-model="notes"
+                                rows="2"
+                                placeholder="Ex: sem cebola, ponto da carne..."
+                                class="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"
+                            ></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Rodapé fixo -->
+                    <div class="border-t border-zinc-100 p-4 flex-shrink-0">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-sm text-zinc-600">Quantidade</span>
+                            <div class="flex items-center gap-3">
+                                <button @click="quantity = Math.max(1, quantity - 1)" class="w-7 h-7 rounded-full border border-zinc-300 flex items-center justify-center text-sm">−</button>
+                                <span class="text-sm font-medium w-4 text-center" x-text="quantity"></span>
+                                <button @click="quantity++" class="w-7 h-7 rounded-full border border-zinc-300 flex items-center justify-center text-sm">+</button>
+                            </div>
+                        </div>
+                        <button
+                            @click="addToCart()"
+                            :disabled="!allGroupsValid"
+                            class="w-full rounded-xl px-4 py-3 flex items-center justify-between text-sm font-medium transition-colors"
+                            :class="allGroupsValid ? 'bg-primary text-white' : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'"
+                        >
+                            <span x-text="allGroupsValid ? 'Adicionar ao carrinho' : 'Preencha os campos obrigatórios'"></span>
+                            <span x-show="allGroupsValid" x-text="formatPrice(totalCents)"></span>
+                        </button>
+                    </div>
+                </div>
+            </template>
+        </div>
     </div>
 
 </div>
