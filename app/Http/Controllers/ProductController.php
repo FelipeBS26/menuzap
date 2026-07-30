@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\ProcessImageJob;
 use App\Models\Category;
+use App\Models\OptionGroup;
 use App\Models\Product;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,6 +25,7 @@ class ProductController extends Controller
     {
         return Inertia::render('Products/Form', [
             'categories' => Category::orderBy('sort_order')->get(['id', 'name']),
+            'optionGroups' => OptionGroup::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'product' => null,
         ]);
     }
@@ -44,6 +46,7 @@ class ProductController extends Controller
         ]);
 
         $this->syncSizes($product, $validated['sizes'] ?? []);
+        $this->syncOptionGroups($product, $validated['option_groups'] ?? []);
         $this->dispatchImageJob($request, $product);
 
         return redirect()->route('tenant.products.index');
@@ -53,7 +56,8 @@ class ProductController extends Controller
     {
         return Inertia::render('Products/Form', [
             'categories' => Category::orderBy('sort_order')->get(['id', 'name']),
-            'product' => $product->load('sizes'),
+            'optionGroups' => OptionGroup::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'product' => $product->load(['sizes', 'optionGroups']),
         ]);
     }
 
@@ -72,6 +76,7 @@ class ProductController extends Controller
         ]);
 
         $this->syncSizes($product, $validated['sizes'] ?? []);
+        $this->syncOptionGroups($product, $validated['option_groups'] ?? []);
         $this->dispatchImageJob($request, $product);
 
         return redirect()->route('tenant.products.index');
@@ -79,8 +84,10 @@ class ProductController extends Controller
 
     public function destroy(Product $product): RedirectResponse
     {
-        // Nota Sprint 3: quando o motor de adicionais existir, desvincular
-        // da pivot product_option_groups aqui também (Fase 5).
+        // detach() aqui é seguro e correto: o PRODUTO está sumindo, então o
+        // vínculo dele com os grupos não faz mais sentido — os grupos em si
+        // continuam existindo intactos para os outros produtos (Fase 5).
+        $product->optionGroups()->detach();
         $product->delete();
 
         return back();
@@ -101,6 +108,19 @@ class ProductController extends Controller
                 'sort_order' => $size->sort_order,
             ]);
         }
+
+        // Duplica também os vínculos de adicionais, com as mesmas regras
+        // de min/max — é o comportamento que o lojista espera de "Duplicar".
+        $syncData = [];
+        foreach ($product->optionGroups as $group) {
+            $syncData[$group->id] = [
+                'tenant_id' => $copy->tenant_id,
+                'min_selections' => $group->pivot->min_selections,
+                'max_selections' => $group->pivot->max_selections,
+                'sort_order' => $group->pivot->sort_order,
+            ];
+        }
+        $copy->optionGroups()->sync($syncData);
 
         return back();
     }
@@ -126,6 +146,16 @@ class ProductController extends Controller
             'sizes.*.name' => ['required_with:sizes', 'string', 'max:50'],
             'sizes.*.price_cents' => ['required_with:sizes', 'integer', 'min:0'],
             'image' => ['nullable', 'image', 'max:5120'],
+
+            // Motor de adicionais (Fase 5/9) — só os grupos marcados como
+            // "linked" chegam aqui como candidatos reais de vínculo.
+            'option_groups' => ['array'],
+            'option_groups.*.id' => [
+                'required_with:option_groups',
+                Rule::exists('option_groups', 'id')->where('tenant_id', $tenantId),
+            ],
+            'option_groups.*.min_selections' => ['required_with:option_groups', 'integer', 'min:0'],
+            'option_groups.*.max_selections' => ['required_with:option_groups', 'integer', 'min:1', 'gte:option_groups.*.min_selections'],
         ]);
     }
 
@@ -143,6 +173,26 @@ class ProductController extends Controller
                 'sort_order' => $i,
             ]);
         }
+    }
+
+    protected function syncOptionGroups(Product $product, array $optionGroups): void
+    {
+        $syncData = [];
+
+        foreach ($optionGroups as $i => $group) {
+            // tenant_id incluído explicitamente: sync() faz INSERT/UPDATE
+            // direto na tabela pivot, sem passar pelos hooks do Model
+            // ProductOptionGroup — não podemos depender do trait HasTenant
+            // preenchendo isso sozinho aqui.
+            $syncData[$group['id']] = [
+                'tenant_id' => $product->tenant_id,
+                'min_selections' => $group['min_selections'],
+                'max_selections' => $group['max_selections'],
+                'sort_order' => $i,
+            ];
+        }
+
+        $product->optionGroups()->sync($syncData);
     }
 
     protected function dispatchImageJob(Request $request, Product $product): void

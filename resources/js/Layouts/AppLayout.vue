@@ -11,7 +11,7 @@ const tenant = computed(() => page.props.tenant);
 const navItems = [
     { label: 'Dashboard', href: route('tenant.dashboard') },
     { label: 'Cardápio', href: route('tenant.categories.index') },
-    { label: 'Adicionais', href: '#' },
+    { label: 'Adicionais', href: route('tenant.option-groups.index') },
     { label: 'Configurações', href: route('tenant.store.edit') },
 ];
 

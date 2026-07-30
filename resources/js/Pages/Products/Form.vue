@@ -1,9 +1,10 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 
 const props = defineProps({
     categories: Array,
+    optionGroups: Array,
     product: Object,
 });
 
@@ -55,19 +56,67 @@ function toggleBadge(value) {
     form.badge = form.badge === value ? '' : value;
 }
 
+// ---------- Motor de adicionais (Fase 5/9) ----------
+// Steppers numéricos de min/max, não botões binários — cobrem 100% dos
+// casos ("escolha até 3", "escolha exatamente 2", "opcional") sem esconder
+// nenhum caso atrás de uma opção limitada. Decisão validada na auditoria
+// da Fase 9 depois que a versão anterior (Sim/Não + pills 1-3) foi
+// identificada como insuficiente para casos como "pizza 4 sabores".
+const groupState = reactive(
+    props.optionGroups.map((g) => {
+        const linked = props.product?.option_groups?.find((pg) => pg.id === g.id);
+        return {
+            id: g.id,
+            name: g.name,
+            linked: !!linked,
+            min_selections: linked?.pivot?.min_selections ?? 0,
+            max_selections: linked?.pivot?.max_selections ?? 1,
+        };
+    })
+);
+
+function toggleGroup(group) {
+    group.linked = !group.linked;
+}
+function decMin(group) {
+    if (group.min_selections > 0) group.min_selections--;
+}
+function incMin(group) {
+    group.min_selections++;
+    if (group.max_selections < group.min_selections) group.max_selections = group.min_selections;
+}
+function decMax(group) {
+    if (group.max_selections > Math.max(1, group.min_selections)) group.max_selections--;
+}
+function incMax(group) {
+    group.max_selections++;
+}
+function ruleLabel(group) {
+    if (group.min_selections === 0) return 'Opcional';
+    if (group.min_selections === group.max_selections) return `Escolha exatamente ${group.min_selections}`;
+    return `Escolha até ${group.max_selections}`;
+}
+
 function submit() {
     const url = isEdit
         ? route('tenant.products.update', props.product.id)
         : route('tenant.products.store');
 
-    form.transform((data) => ({ ...data, _method: isEdit ? 'put' : 'post' }))
-        .post(url, { forceFormData: true });
+    const optionGroupsPayload = groupState
+        .filter((g) => g.linked)
+        .map((g) => ({ id: g.id, min_selections: g.min_selections, max_selections: g.max_selections }));
+
+    form.transform((data) => ({
+        ...data,
+        option_groups: optionGroupsPayload,
+        _method: isEdit ? 'put' : 'post',
+    })).post(url, { forceFormData: true });
 }
 </script>
 
 <template>
     <h1 class="text-xl font-medium text-zinc-900 mb-1">{{ isEdit ? 'Editar produto' : 'Novo produto' }}</h1>
-    <p class="text-sm text-zinc-500 mb-6">Preencha os dados essenciais e a mídia do produto.</p>
+    <p class="text-sm text-zinc-500 mb-6">Preencha os dados essenciais, a mídia e os adicionais do produto.</p>
 
     <form @submit.prevent="submit" class="grid grid-cols-1 lg:grid-cols-5 gap-6 max-w-4xl">
         <!-- Coluna esquerda: essencial -->
@@ -121,6 +170,48 @@ function submit() {
                     <button type="button" @click="addSize" class="text-xs text-primary flex items-center gap-1">+ Adicionar tamanho</button>
                 </div>
             </div>
+
+            <!-- Motor de adicionais -->
+            <div class="bg-white rounded-xl border border-zinc-200 p-5 space-y-3">
+                <label class="block text-xs text-zinc-600 mb-1">Grupos de adicionais</label>
+
+                <div v-for="group in groupState" :key="group.id" class="border border-zinc-200 rounded-lg overflow-hidden">
+                    <label class="flex items-center gap-2 px-3 py-2.5 cursor-pointer">
+                        <input type="checkbox" :checked="group.linked" @change="toggleGroup(group)" class="w-4 h-4" />
+                        <span class="text-sm text-zinc-900">{{ group.name }}</span>
+                    </label>
+
+                    <div v-if="group.linked" class="bg-zinc-50 px-3 py-3 border-t border-zinc-200 flex flex-wrap items-center gap-6">
+                        <div>
+                            <p class="text-[11px] text-zinc-500 mb-1">Mínimo de escolhas</p>
+                            <div class="flex items-center gap-2">
+                                <button type="button" @click="decMin(group)" class="w-6 h-6 rounded-full border border-zinc-300 text-zinc-600 text-xs leading-none">−</button>
+                                <span class="text-sm font-medium w-4 text-center">{{ group.min_selections }}</span>
+                                <button type="button" @click="incMin(group)" class="w-6 h-6 rounded-full border border-zinc-300 text-zinc-600 text-xs leading-none">+</button>
+                            </div>
+                        </div>
+                        <div>
+                            <p class="text-[11px] text-zinc-500 mb-1">Máximo de escolhas</p>
+                            <div class="flex items-center gap-2">
+                                <button type="button" @click="decMax(group)" class="w-6 h-6 rounded-full border border-zinc-300 text-zinc-600 text-xs leading-none">−</button>
+                                <span class="text-sm font-medium w-4 text-center">{{ group.max_selections }}</span>
+                                <button type="button" @click="incMax(group)" class="w-6 h-6 rounded-full border border-zinc-300 text-zinc-600 text-xs leading-none">+</button>
+                            </div>
+                        </div>
+                        <span
+                            class="text-[11px] px-2 py-1 rounded-full ml-auto"
+                            :class="group.min_selections > 0 ? 'bg-amber-50 text-amber-700' : 'bg-zinc-100 text-zinc-500'"
+                        >
+                            {{ ruleLabel(group) }}
+                        </span>
+                    </div>
+                </div>
+
+                <p v-if="!groupState.length" class="text-xs text-zinc-400">
+                    Nenhum grupo criado ainda.
+                    <a :href="route('tenant.option-groups.index')" target="_blank" class="text-primary">Criar grupo →</a>
+                </p>
+            </div>
         </div>
 
         <!-- Coluna direita: mídia e visibilidade -->
@@ -169,10 +260,6 @@ function submit() {
                     <span class="text-sm text-zinc-900">Produto ativo</span>
                     <input type="checkbox" v-model="form.is_active" class="w-4 h-4" />
                 </div>
-
-                <p class="text-xs text-zinc-400 pt-3 border-t border-zinc-100">
-                    Grupos de adicionais chegam na próxima parte do painel.
-                </p>
             </div>
         </div>
 
