@@ -1,6 +1,7 @@
 <script setup>
 import { useForm, router } from '@inertiajs/vue3';
 import { reactive, ref } from 'vue';
+import CurrencyInput from '@/components/CurrencyInput.vue';
 
 const props = defineProps({ groups: Array });
 
@@ -15,12 +16,6 @@ function addNewItem() {
 }
 function removeNewItem(i) {
     newGroup.items.splice(i, 1);
-}
-function priceReais(item) {
-    return (item.price_cents / 100).toFixed(2);
-}
-function setPriceReais(item, v) {
-    item.price_cents = Math.round(parseFloat(v || 0) * 100);
 }
 
 function createGroup() {
@@ -91,7 +86,7 @@ function destroyGroup(group) {
         <div class="space-y-2 mb-3">
             <div v-for="(item, i) in newGroup.items" :key="i" class="flex gap-2 items-center">
                 <input v-model="item.name" placeholder="Nome do item (ex: Catupiry)" class="flex-1 px-3 py-2 rounded-lg border border-zinc-300 text-sm" />
-                <input :value="priceReais(item)" @input="setPriceReais(item, $event.target.value)" type="number" step="0.01" min="0" placeholder="R$" class="w-24 px-3 py-2 rounded-lg border border-zinc-300 text-sm" />
+                <CurrencyInput v-model="item.price_cents" placeholder="R$" class="w-24 px-3 py-2 rounded-lg border border-zinc-300 text-sm" />
                 <button type="button" @click="removeNewItem(i)" class="text-red-500 text-xs px-1">✕</button>
             </div>
         </div>
@@ -134,7 +129,7 @@ function destroyGroup(group) {
                 <div class="space-y-2">
                     <div v-for="(item, i) in editForms[group.id].items" :key="i" class="flex gap-2 items-center">
                         <input v-model="item.name" class="flex-1 px-3 py-2 rounded-lg border border-zinc-300 text-sm bg-white" />
-                        <input :value="priceReais(item)" @input="setPriceReais(item, $event.target.value)" type="number" step="0.01" min="0" class="w-24 px-3 py-2 rounded-lg border border-zinc-300 text-sm bg-white" />
+                        <CurrencyInput v-model="item.price_cents" class="w-24 px-3 py-2 rounded-lg border border-zinc-300 text-sm bg-white" />
                         <button type="button" @click="removeEditItem(group, i)" class="text-red-500 text-xs px-1">✕</button>
                     </div>
                 </div>

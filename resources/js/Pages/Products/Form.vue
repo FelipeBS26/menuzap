@@ -1,6 +1,7 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
-import { computed, reactive, ref } from 'vue';
+import { reactive, ref } from 'vue';
+import CurrencyInput from '@/components/CurrencyInput.vue';
 
 const props = defineProps({
     categories: Array,
@@ -22,22 +23,11 @@ const form = useForm({
     image: null,
 });
 
-const basePriceReais = computed({
-    get: () => (form.base_price_cents / 100).toFixed(2),
-    set: (v) => (form.base_price_cents = Math.round(parseFloat(v || 0) * 100)),
-});
-
 function addSize() {
     form.sizes.push({ name: '', price_cents: 0 });
 }
 function removeSize(i) {
     form.sizes.splice(i, 1);
-}
-function sizePriceReais(i) {
-    return (form.sizes[i].price_cents / 100).toFixed(2);
-}
-function setSizePriceReais(i, v) {
-    form.sizes[i].price_cents = Math.round(parseFloat(v || 0) * 100);
 }
 
 const imagePreview = ref(props.product?.image_url ?? null);
@@ -153,18 +143,13 @@ function submit() {
 
                 <div v-if="!form.has_sizes">
                     <label class="block text-xs text-zinc-600 mb-1">Preço (R$)</label>
-                    <input v-model="basePriceReais" type="number" step="0.01" min="0" class="w-full max-w-[160px] px-3 py-2 rounded-lg border border-zinc-300 text-sm" />
+                    <CurrencyInput v-model="form.base_price_cents" class="w-full max-w-[160px] px-3 py-2 rounded-lg border border-zinc-300 text-sm" />
                 </div>
 
                 <div v-else class="bg-zinc-50 rounded-lg p-3 space-y-2">
                     <div v-for="(size, i) in form.sizes" :key="i" class="flex gap-2 items-center">
                         <input v-model="size.name" placeholder="Nome (ex: Grande)" class="flex-1 px-3 py-2 rounded-lg border border-zinc-300 text-sm" />
-                        <input
-                            :value="sizePriceReais(i)"
-                            @input="setSizePriceReais(i, $event.target.value)"
-                            type="number" step="0.01" min="0" placeholder="Preço"
-                            class="w-28 px-3 py-2 rounded-lg border border-zinc-300 text-sm"
-                        />
+                        <CurrencyInput v-model="size.price_cents" placeholder="Preço" class="w-28 px-3 py-2 rounded-lg border border-zinc-300 text-sm" />
                         <button type="button" @click="removeSize(i)" class="text-red-500 text-xs px-1">✕</button>
                     </div>
                     <button type="button" @click="addSize" class="text-xs text-primary flex items-center gap-1">+ Adicionar tamanho</button>

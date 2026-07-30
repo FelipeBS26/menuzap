@@ -1,6 +1,6 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import CurrencyInput from '@/components/CurrencyInput.vue';
 
 const props = defineProps({ store: Object });
 
@@ -18,17 +18,6 @@ const form = useForm({
     accepts_dine_in: props.store.accepts_dine_in,
     logo: null,
     banner: null,
-});
-
-// Conversão centavos <-> reais só na camada de exibição — o banco continua
-// em centavos (Fase 5), o lojista digita em reais normalmente.
-const deliveryFeeReais = computed({
-    get: () => (form.delivery_fee_cents / 100).toFixed(2),
-    set: (v) => (form.delivery_fee_cents = Math.round(parseFloat(v || 0) * 100)),
-});
-const minOrderReais = computed({
-    get: () => (form.min_order_cents / 100).toFixed(2),
-    set: (v) => (form.min_order_cents = Math.round(parseFloat(v || 0) * 100)),
 });
 
 function submit() {
@@ -98,11 +87,11 @@ function submit() {
             <div class="grid grid-cols-3 gap-4">
                 <div>
                     <label class="block text-xs text-zinc-600 mb-1">Taxa de entrega (R$)</label>
-                    <input v-model="deliveryFeeReais" type="number" step="0.01" min="0" class="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm" />
+                    <CurrencyInput v-model="form.delivery_fee_cents" class="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm" />
                 </div>
                 <div>
                     <label class="block text-xs text-zinc-600 mb-1">Pedido mínimo (R$)</label>
-                    <input v-model="minOrderReais" type="number" step="0.01" min="0" class="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm" />
+                    <CurrencyInput v-model="form.min_order_cents" class="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm" />
                 </div>
                 <div>
                     <label class="block text-xs text-zinc-600 mb-1">Tempo estimado (min)</label>
