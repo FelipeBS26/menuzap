@@ -4,20 +4,34 @@ namespace App\Http\Controllers;
 
 use Illuminate\View\View;
 
-/**
- * Placeholder — a vitrine de verdade (Blade + Alpine, hero, cardápio, carrinho)
- * é construída no Sprint 3. Isto só prova que o TenantIdentificationMiddleware
- * está resolvendo a loja corretamente pelo slug.
- */
 class StorefrontController extends Controller
 {
     public function index(): View
     {
         $tenant = app('tenant');
+        $store = $tenant->store;
 
-        return view('storefront.placeholder', [
+        $categories = $tenant->categories()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->with(['products' => function ($query) {
+                $query->where('is_active', true)->orderBy('sort_order')->with([
+                    'sizes',
+                    'optionGroups' => fn ($q) => $q->where('is_active', true)->orderByPivot('sort_order'),
+                    'optionGroups.items' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order'),
+                ]);
+            }])
+            ->get()
+            // Categoria sem nenhum produto ativo não aparece — evita seção
+            // vazia confusa na vitrine (ex: categoria criada mas ainda sem
+            // produtos cadastrados).
+            ->filter(fn ($category) => $category->products->isNotEmpty())
+            ->values();
+
+        return view('storefront.index', [
             'tenant' => $tenant,
-            'store' => $tenant->store,
+            'store' => $store,
+            'categories' => $categories,
         ]);
     }
 }

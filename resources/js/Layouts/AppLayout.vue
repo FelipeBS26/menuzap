@@ -10,9 +10,9 @@ const tenant = computed(() => page.props.tenant);
 // de menu hambúrguer (decisão da Fase 9: 1 toque é mais rápido que drawer).
 const navItems = [
     { label: 'Dashboard', href: route('tenant.dashboard') },
-    { label: 'Cardápio', href: '#' },
-    { label: 'Adicionais', href: '#' },
-    { label: 'Configurações', href: '#' },
+    { label: 'Cardápio', href: route('tenant.categories.index') },
+    { label: 'Adicionais', href: route('tenant.option-groups.index') },
+    { label: 'Configurações', href: route('tenant.store.edit') },
 ];
 
 const toggling = ref(false);

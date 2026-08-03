@@ -31,7 +31,10 @@ function move(category, direction) {
 </script>
 
 <template>
-    <h1 class="text-xl font-medium text-zinc-900 mb-1">Categorias</h1>
+    <div class="flex items-center justify-between mb-1">
+        <h1 class="text-xl font-medium text-zinc-900">Categorias</h1>
+        <a :href="route('tenant.products.index')" class="text-sm text-primary font-medium">Ver produtos →</a>
+    </div>
     <p class="text-sm text-zinc-500 mb-6">Organize o cardápio em grupos — Hambúrgueres, Bebidas, Sobremesas...</p>
 
     <form @submit.prevent="submit" class="flex gap-2 mb-6 max-w-md">

@@ -10,7 +10,9 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
-use Intervention\Image\Laravel\Facades\Image;
+use Intervention\Image\Drivers\Gd\Driver;
+use Intervention\Image\Format;
+use Intervention\Image\ImageManager;
 
 /**
  * Pipeline de upload: valida → redimensiona → converte para WebP → gera
@@ -42,14 +44,26 @@ class ProcessImageJob implements ShouldQueue
     {
         TenantContext::set($this->tenantId);
 
+        // Fotos de celular (4000x3000px+) descomprimidas em memória pelo
+        // driver GD facilmente estouram o limite padrão do PHP (128MB) —
+        // aumentamos só para este Job, sem precisar mexer no php.ini do
+        // servidor (que varia por ambiente e teria que ser refeito a cada
+        // instalação nova do PHP).
+        ini_set('memory_limit', '256M');
+
         $model = $this->modelClass::findOrFail($this->modelId);
 
-        $image = Image::read(Storage::path($this->tempPath));
+        // API do Intervention Image v4 (mudou da v3 há poucas semanas):
+        // instanciação via usingDriver() estático, leitura via decode() no
+        // lugar de read(), codificação via encodeUsingFormat() no lugar de
+        // toWebp(). Sem Facade — não depende de config/binding do Laravel.
+        $manager = ImageManager::usingDriver(Driver::class);
+        $image = $manager->decode(Storage::path($this->tempPath));
         $image->cover($this->maxWidth, $this->maxHeight);
 
         $filename = uniqid('img_').'.webp';
         $path = "tenants/{$this->tenantId}/{$filename}";
-        Storage::disk('public')->put($path, (string) $image->toWebp(82));
+        Storage::disk('public')->put($path, (string) $image->encodeUsingFormat(Format::WEBP, quality: 82));
 
         $updates = [$this->field => Storage::disk('public')->url($path)];
 
@@ -58,7 +72,7 @@ class ProcessImageJob implements ShouldQueue
             $thumbnail = clone $image;
             $thumbnail->cover(300, 300);
             $thumbPath = "tenants/{$this->tenantId}/thumb_{$filename}";
-            Storage::disk('public')->put($thumbPath, (string) $thumbnail->toWebp(75));
+            Storage::disk('public')->put($thumbPath, (string) $thumbnail->encodeUsingFormat(Format::WEBP, quality: 75));
             $updates['thumbnail_url'] = Storage::disk('public')->url($thumbPath);
         }
 

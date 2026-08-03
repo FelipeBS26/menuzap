@@ -6,7 +6,10 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
     plugins: [
         laravel({
-            input: ['resources/css/app.css', 'resources/js/app.js'],
+            // storefront.js é um entry point separado do app.js (Inertia) —
+            // vitrine e painel são bundles independentes, cada superfície
+            // carrega só o JS que realmente usa (Fase 4).
+            input: ['resources/css/app.css', 'resources/js/app.js', 'resources/js/storefront.js'],
             refresh: true,
         }),
         vue({
