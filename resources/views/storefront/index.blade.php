@@ -17,6 +17,7 @@
             'acceptsDelivery' => $store->accepts_delivery,
             'acceptsPickup' => $store->accepts_pickup,
             'acceptsDineIn' => $store->accepts_dine_in,
+            'paymentMethods' => $store->payment_methods,
         ]);
     </script>
 
@@ -315,81 +316,179 @@
         </div>
     </div>
 
-    <!-- Drawer do carrinho -->
+    <!-- Drawer do carrinho + checkout (mesmo painel, 3 etapas — Fase 8) -->
     <div x-show="cartOpen" x-cloak class="fixed inset-0 z-30 flex items-end sm:items-center sm:justify-center">
         <div class="absolute inset-0 bg-black/50" @click="closeCart()"></div>
 
         <div class="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[85vh] flex flex-col">
-            <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-100 flex-shrink-0">
-                <span class="text-sm font-semibold text-zinc-900">
-                    Seu carrinho · <span x-text="$store.cart.count"></span> ite<span x-text="$store.cart.count === 1 ? 'm' : 'ns'"></span>
+            <!-- Cabeçalho — muda por etapa -->
+            <div class="flex items-center gap-2 px-4 py-3 border-b border-zinc-100 flex-shrink-0">
+                <button x-show="checkoutStep > 0" @click="checkoutStep === 1 ? backToCart() : backToType()" class="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 flex-shrink-0">‹</button>
+                <span class="text-sm font-semibold text-zinc-900 flex-1">
+                    <span x-show="checkoutStep === 0">Seu carrinho · <span x-text="$store.cart.count"></span> ite<span x-text="$store.cart.count === 1 ? 'm' : 'ns'"></span></span>
+                    <span x-show="checkoutStep === 1">Como você quer receber?</span>
+                    <span x-show="checkoutStep === 2">Dados e pagamento</span>
                 </span>
-                <button @click="closeCart()" class="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">✕</button>
+                <button @click="closeCart()" class="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 flex-shrink-0">✕</button>
             </div>
 
             <div class="overflow-y-auto flex-1 px-4 py-3">
-                <template x-for="(item, index) in $store.cart.items" :key="index">
-                    <div class="flex gap-3 py-3 border-b border-zinc-100 last:border-none">
-                        <!-- Stepper de quantidade -->
-                        <div class="flex flex-col items-center gap-1 flex-shrink-0">
-                            <button @click="incrementCartQuantity(index)" class="w-6 h-6 rounded-full border border-zinc-300 flex items-center justify-center text-xs">+</button>
-                            <span class="text-sm font-medium" x-text="item.quantity"></span>
-                            <button @click="decrementCartQuantity(index)" class="w-6 h-6 rounded-full border border-zinc-300 flex items-center justify-center text-xs">−</button>
-                        </div>
 
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-start justify-between gap-2">
-                                <span class="text-sm font-medium text-zinc-900" x-text="cartItemDisplay(item).name"></span>
-                                <span class="text-sm font-medium text-zinc-900 whitespace-nowrap" x-text="formatPrice(item.unitPriceCents * item.quantity)"></span>
+                <!-- Etapa 0: lista do carrinho -->
+                <template x-if="checkoutStep === 0">
+                    <div>
+                        <template x-for="(item, index) in $store.cart.items" :key="index">
+                            <div class="flex gap-3 py-3 border-b border-zinc-100 last:border-none">
+                                <div class="flex flex-col items-center gap-1 flex-shrink-0">
+                                    <button @click="incrementCartQuantity(index)" class="w-6 h-6 rounded-full border border-zinc-300 flex items-center justify-center text-xs">+</button>
+                                    <span class="text-sm font-medium" x-text="item.quantity"></span>
+                                    <button @click="decrementCartQuantity(index)" class="w-6 h-6 rounded-full border border-zinc-300 flex items-center justify-center text-xs">−</button>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-start justify-between gap-2">
+                                        <span class="text-sm font-medium text-zinc-900" x-text="cartItemDisplay(item).name"></span>
+                                        <span class="text-sm font-medium text-zinc-900 whitespace-nowrap" x-text="formatPrice(item.unitPriceCents * item.quantity)"></span>
+                                    </div>
+                                    <p class="text-xs text-zinc-500 mt-0.5">
+                                        <span x-show="cartItemDisplay(item).sizeLabel" x-text="cartItemDisplay(item).sizeLabel"></span>
+                                        <template x-if="cartItemDisplay(item).optionsLabel.length">
+                                            <span x-text="(cartItemDisplay(item).sizeLabel ? ' · ' : '') + cartItemDisplay(item).optionsLabel.join(', ')"></span>
+                                        </template>
+                                    </p>
+                                    <p x-show="item.notes" class="text-xs text-zinc-400 italic mt-0.5" x-text="item.notes"></p>
+                                    <div class="flex items-center gap-3 mt-1.5">
+                                        <button @click="editCartItem(index)" class="text-xs text-primary">Editar</button>
+                                        <button @click="removeCartItem(index)" class="text-xs text-red-500">Remover</button>
+                                    </div>
+                                </div>
                             </div>
-                            <p class="text-xs text-zinc-500 mt-0.5">
-                                <span x-show="cartItemDisplay(item).sizeLabel" x-text="cartItemDisplay(item).sizeLabel"></span>
-                                <template x-if="cartItemDisplay(item).optionsLabel.length">
-                                    <span x-text="(cartItemDisplay(item).sizeLabel ? ' · ' : '') + cartItemDisplay(item).optionsLabel.join(', ')"></span>
-                                </template>
-                            </p>
-                            <p x-show="item.notes" class="text-xs text-zinc-400 italic mt-0.5" x-text="item.notes"></p>
-
-                            <div class="flex items-center gap-3 mt-1.5">
-                                <button @click="editCartItem(index)" class="text-xs text-primary">Editar</button>
-                                <button @click="removeCartItem(index)" class="text-xs text-red-500">Remover</button>
-                            </div>
-                        </div>
+                        </template>
+                        <p x-show="!$store.cart.items.length" class="text-center text-sm text-zinc-400 py-10">Seu carrinho está vazio.</p>
                     </div>
                 </template>
 
-                <p x-show="!$store.cart.items.length" class="text-center text-sm text-zinc-400 py-10">Seu carrinho está vazio.</p>
+                <!-- Etapa 1: tipo de pedido -->
+                <template x-if="checkoutStep === 1">
+                    <div class="grid grid-cols-3 gap-2 py-2">
+                        @if($store->accepts_delivery)
+                            <button type="button" @click="selectOrderType('delivery')"
+                                class="flex flex-col items-center gap-2 border rounded-xl py-4 px-2"
+                                :class="orderType === 'delivery' ? 'border-primary bg-primary/5' : 'border-zinc-200'">
+                                <span class="text-xl">🛵</span>
+                                <span class="text-xs font-medium text-zinc-900">Entrega</span>
+                            </button>
+                        @endif
+                        @if($store->accepts_pickup)
+                            <button type="button" @click="selectOrderType('pickup')"
+                                class="flex flex-col items-center gap-2 border rounded-xl py-4 px-2"
+                                :class="orderType === 'pickup' ? 'border-primary bg-primary/5' : 'border-zinc-200'">
+                                <span class="text-xl">🏃</span>
+                                <span class="text-xs font-medium text-zinc-900">Retirada</span>
+                            </button>
+                        @endif
+                        @if($store->accepts_dine_in)
+                            <button type="button" @click="selectOrderType('dine_in')"
+                                class="flex flex-col items-center gap-2 border rounded-xl py-4 px-2"
+                                :class="orderType === 'dine_in' ? 'border-primary bg-primary/5' : 'border-zinc-200'">
+                                <span class="text-xl">🍽️</span>
+                                <span class="text-xs font-medium text-zinc-900">No local</span>
+                            </button>
+                        @endif
+                    </div>
+                </template>
+
+                <!-- Etapa 2: dados e pagamento -->
+                <template x-if="checkoutStep === 2">
+                    <div class="space-y-4 py-1">
+                        <div>
+                            <label class="block text-xs text-zinc-600 mb-1">
+                                Nome <span x-show="orderType !== 'dine_in'" class="text-red-500">*</span>
+                            </label>
+                            <input type="text" x-model="customerName" class="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-zinc-600 mb-1">Telefone (opcional)</label>
+                            <input type="tel" x-model="customerPhone" class="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm">
+                        </div>
+
+                        <template x-if="orderType === 'delivery'">
+                            <div class="space-y-2 bg-zinc-50 rounded-lg p-3">
+                                <p class="text-xs font-medium text-zinc-600">Endereço de entrega</p>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <input type="text" x-model="address.street" placeholder="Rua" class="col-span-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm bg-white">
+                                    <input type="text" x-model="address.number" placeholder="Nº" class="px-3 py-2 rounded-lg border border-zinc-300 text-sm bg-white">
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <input type="text" x-model="address.neighborhood" placeholder="Bairro" class="px-3 py-2 rounded-lg border border-zinc-300 text-sm bg-white">
+                                    <input type="text" x-model="address.complement" placeholder="Complemento" class="px-3 py-2 rounded-lg border border-zinc-300 text-sm bg-white">
+                                </div>
+                                <input type="text" x-model="address.reference" placeholder="Ponto de referência" class="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm bg-white">
+                            </div>
+                        </template>
+
+                        <div>
+                            <label class="block text-xs text-zinc-600 mb-2">Forma de pagamento</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                @foreach(['pix' => 'Pix', 'cash' => 'Dinheiro', 'debit' => 'Débito', 'credit' => 'Crédito'] as $value => $label)
+                                    @if(in_array($value, $store->payment_methods ?? []))
+                                        <button type="button" @click="paymentMethod = '{{ $value }}'"
+                                            class="border rounded-lg px-3 py-2 text-sm text-left"
+                                            :class="paymentMethod === '{{ $value }}' ? 'border-primary bg-primary/5 text-zinc-900' : 'border-zinc-200 text-zinc-600'">
+                                            {{ $label }}
+                                        </button>
+                                    @endif
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <template x-if="paymentMethod === 'cash'">
+                            <div class="bg-zinc-50 rounded-lg p-3">
+                                <label class="block text-xs text-zinc-600 mb-1">Troco para quanto?</label>
+                                <input type="text" inputmode="decimal" x-model="changeForInput" placeholder="Ex: 50,00" class="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm bg-white">
+                                <p x-show="changeForInput && !changeIsValid" class="text-xs text-red-500 mt-1">O valor deve ser maior que o total do pedido.</p>
+                                <p x-show="changeForInput && changeIsValid && changeAmountCents > 0" class="text-xs text-emerald-600 mt-1">
+                                    Levar <span x-text="formatPrice(changeAmountCents)"></span> de troco.
+                                </p>
+                            </div>
+                        </template>
+
+                        <label class="flex items-start gap-2 pt-2 border-t border-zinc-100">
+                            <input type="checkbox" x-model="saveDataConsent" class="mt-0.5">
+                            <span class="text-[11px] text-zinc-500">Salvar meus dados neste dispositivo para o próximo pedido. Você pode apagá-los quando quiser.</span>
+                        </label>
+                    </div>
+                </template>
             </div>
 
+            <!-- Rodapé — muda de ação por etapa -->
             <div class="border-t border-zinc-100 p-4 flex-shrink-0">
-                <div class="space-y-1 mb-3">
-                    <div class="flex justify-between text-sm text-zinc-600">
-                        <span>Subtotal</span>
-                        <span x-text="formatPrice($store.cart.totalCents)"></span>
+                <template x-if="checkoutStep === 0">
+                    <div>
+                        <div class="space-y-1 mb-3">
+                            <div class="flex justify-between text-sm text-zinc-600">
+                                <span>Subtotal</span>
+                                <span x-text="formatPrice($store.cart.totalCents)"></span>
+                            </div>
+                        </div>
+                        <div x-show="!cartMeetsMinimum" x-cloak class="bg-amber-50 text-amber-700 text-xs rounded-lg px-3 py-2 mb-3">
+                            Faltam <span x-text="formatPrice(amountMissingForMinimum)"></span> para o pedido mínimo.
+                        </div>
+                        <button type="button" @click="goToCheckout()" :disabled="!cartMeetsMinimum || !$store.cart.items.length"
+                            class="w-full rounded-xl px-4 py-3 text-sm font-medium transition-colors"
+                            :class="(cartMeetsMinimum && $store.cart.items.length) ? 'bg-primary text-white' : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'">
+                            <span x-text="cartMeetsMinimum ? 'Continuar' : 'Faltam itens para o pedido mínimo'"></span>
+                        </button>
                     </div>
-                    <div class="flex justify-between text-sm text-zinc-600" x-show="storeConfig.acceptsDelivery">
-                        <span>Taxa de entrega</span>
-                        <span x-text="formatPrice(storeConfig.deliveryFeeCents)"></span>
-                    </div>
-                    <div class="flex justify-between text-sm font-semibold text-zinc-900 pt-1 border-t border-zinc-100">
-                        <span>Total</span>
-                        <span x-text="formatPrice($store.cart.totalCents + (storeConfig.acceptsDelivery ? storeConfig.deliveryFeeCents : 0))"></span>
-                    </div>
-                </div>
+                </template>
 
-                <div x-show="!cartMeetsMinimum" x-cloak class="bg-amber-50 text-amber-700 text-xs rounded-lg px-3 py-2 mb-3">
-                    Faltam <span x-text="formatPrice(amountMissingForMinimum)"></span> para o pedido mínimo.
-                </div>
-
-                <button
-                    type="button"
-                    :disabled="!cartMeetsMinimum || !$store.cart.items.length"
-                    class="w-full rounded-xl px-4 py-3 text-sm font-medium transition-colors"
-                    :class="(cartMeetsMinimum && $store.cart.items.length) ? 'bg-primary text-white' : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'"
-                >
-                    <span x-text="cartMeetsMinimum ? 'Continuar' : 'Faltam itens para o pedido mínimo'"></span>
-                    {{-- @click do checkout chega na Parte 2 do Sprint 4 --}}
-                </button>
+                <template x-if="checkoutStep === 2">
+                    <button type="button" @click="submitOrder()" :disabled="!canSubmitOrder"
+                        class="w-full rounded-xl px-4 py-3 flex items-center justify-between text-sm font-medium transition-colors"
+                        :class="canSubmitOrder ? 'bg-primary text-white' : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'">
+                        <span>Enviar pedido pelo WhatsApp</span>
+                        <span x-show="canSubmitOrder" x-text="formatPrice(checkoutTotalCents)"></span>
+                    </button>
+                </template>
             </div>
         </div>
     </div>

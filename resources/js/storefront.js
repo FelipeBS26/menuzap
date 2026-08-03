@@ -31,8 +31,31 @@ Alpine.store('cart', {
         this.persist();
     },
 
+    clear() {
+        this.items = [];
+        this.persist();
+    },
+
     persist() {
         localStorage.setItem('menuzap_cart', JSON.stringify(this.items));
+    },
+});
+
+// Store separado para os dados do cliente (nome, telefone, endereço) —
+// persistidos entre visitas para pré-preencher o checkout (Fase 3/7).
+// Deliberadamente separado do carrinho: limpar o carrinho depois de um
+// pedido não deve apagar os dados de contato do cliente.
+Alpine.store('customer', {
+    data: JSON.parse(localStorage.getItem('menuzap_customer') || '{}'),
+
+    save(data) {
+        this.data = { ...this.data, ...data };
+        localStorage.setItem('menuzap_customer', JSON.stringify(this.data));
+    },
+
+    clear() {
+        this.data = {};
+        localStorage.removeItem('menuzap_customer');
     },
 });
 
@@ -42,7 +65,7 @@ Alpine.data('storefront', (initialCategoryId) => ({
 
     // ---------- Catálogo e config da loja (JSON embutido na página) ----------
     productsById: {},
-    storeConfig: { deliveryFeeCents: 0, minOrderCents: 0 },
+    storeConfig: { deliveryFeeCents: 0, minOrderCents: 0, paymentMethods: [] },
 
     init() {
         const catalog = window.__CATALOG__ || [];
@@ -58,10 +81,10 @@ Alpine.data('storefront', (initialCategoryId) => ({
     open: false,
     product: null,
     selectedSizeId: null,
-    selections: {}, // { groupId: [itemId, itemId, ...] }
+    selections: {},
     quantity: 1,
     notes: '',
-    editingCartIndex: null, // null = adicionando novo · número = editando item existente
+    editingCartIndex: null,
 
     openModal(productId) {
         const product = this.productsById[productId];
@@ -77,8 +100,6 @@ Alpine.data('storefront', (initialCategoryId) => ({
         this.open = true;
     },
 
-    // Reabre o modal com as escolhas exatas de um item já no carrinho —
-    // o cliente não é punido por querer mudar de ideia (Fase 8).
     editCartItem(index) {
         const item = this.$store.cart.items[index];
         const product = this.productsById[item.productId];
@@ -108,8 +129,6 @@ Alpine.data('storefront', (initialCategoryId) => ({
             return;
         }
 
-        // Seleção única (max = 1): marcar substitui o que já estava
-        // marcado, em vez de acumular — comportamento de rádio, não checkbox.
         if (group.pivot.max_selections === 1) {
             this.selections[group.id] = [item.id];
         } else if (sel.length < group.pivot.max_selections) {
@@ -187,19 +206,29 @@ Alpine.data('storefront', (initialCategoryId) => ({
         this.closeModal();
     },
 
-    // ---------- Carrinho (drawer) ----------
+    // ---------- Carrinho + Checkout (mesmo drawer, etapas diferentes) ----------
+    // checkoutStep: 0 = lista do carrinho · 1 = tipo de pedido · 2 = dados e pagamento
+    // Decisão da Fase 8: o checkout NUNCA é uma tela separada — é o mesmo
+    // painel mudando de conteúdo, sem fechar e reabrir.
     cartOpen: false,
+    checkoutStep: 0,
+
+    orderType: null, // 'delivery' | 'pickup' | 'dine_in'
+    customerName: '',
+    customerPhone: '',
+    address: { street: '', number: '', neighborhood: '', complement: '', reference: '' },
+    paymentMethod: '',
+    changeForInput: '',
+    saveDataConsent: true,
 
     openCart() {
         this.cartOpen = true;
+        this.checkoutStep = 0;
     },
     closeCart() {
         this.cartOpen = false;
     },
 
-    // Calcula os rótulos de exibição de um item do carrinho a partir do
-    // catálogo — nunca fica desatualizado, mesmo que o nome do produto
-    // mude depois do item já estar no carrinho.
     cartItemDisplay(item) {
         const product = this.productsById[item.productId];
         if (!product) return { name: 'Produto removido', sizeLabel: null, optionsLabel: [] };
@@ -224,8 +253,6 @@ Alpine.data('storefront', (initialCategoryId) => ({
         this.$store.cart.persist();
     },
 
-    // Decrementar até 0 pede confirmação antes de remover — evita exclusão
-    // acidental de um item que o cliente passou tempo personalizando (Fase 8).
     decrementCartQuantity(index) {
         const item = this.$store.cart.items[index];
         if (item.quantity > 1) {
@@ -248,6 +275,82 @@ Alpine.data('storefront', (initialCategoryId) => ({
 
     get amountMissingForMinimum() {
         return Math.max(0, this.storeConfig.minOrderCents - this.$store.cart.totalCents);
+    },
+
+    // ---------- Navegação entre etapas do checkout ----------
+    goToCheckout() {
+        if (!this.cartMeetsMinimum || !this.$store.cart.items.length) return;
+
+        // Pré-preenche com dados salvos de uma visita anterior — o cliente
+        // não redigita nome/endereço toda vez (Fase 3/7).
+        const saved = this.$store.customer.data;
+        this.customerName = saved.name || '';
+        this.customerPhone = saved.phone || '';
+        this.address = { street: '', number: '', neighborhood: '', complement: '', reference: '', ...(saved.address || {}) };
+        this.paymentMethod = '';
+        this.changeForInput = '';
+        this.checkoutStep = 1;
+    },
+
+    backToCart() {
+        this.checkoutStep = 0;
+    },
+    backToType() {
+        this.checkoutStep = 1;
+    },
+
+    selectOrderType(type) {
+        this.orderType = type;
+        this.checkoutStep = 2;
+    },
+
+    get checkoutDeliveryFeeCents() {
+        return this.orderType === 'delivery' ? this.storeConfig.deliveryFeeCents : 0;
+    },
+    get checkoutTotalCents() {
+        return this.$store.cart.totalCents + this.checkoutDeliveryFeeCents;
+    },
+
+    // Matemática do troco (Fase 8): não deixa o cliente digitar um valor
+    // menor que o total, e já calcula quanto o entregador precisa levar.
+    get changeForCents() {
+        const cleaned = (this.changeForInput || '').replace(/\./g, '').replace(',', '.');
+        return Math.round((parseFloat(cleaned) || 0) * 100);
+    },
+    get changeAmountCents() {
+        return Math.max(0, this.changeForCents - this.checkoutTotalCents);
+    },
+    get changeIsValid() {
+        if (this.paymentMethod !== 'cash' || !this.changeForInput) return true;
+        return this.changeForCents >= this.checkoutTotalCents;
+    },
+
+    get canSubmitOrder() {
+        if (!this.orderType || !this.paymentMethod || !this.changeIsValid) return false;
+        if (this.orderType !== 'dine_in' && !this.customerName.trim()) return false;
+        if (this.orderType === 'delivery') {
+            if (!this.address.street.trim() || !this.address.number.trim() || !this.address.neighborhood.trim()) {
+                return false;
+            }
+        }
+        return true;
+    },
+
+    // Envio de verdade (montar a mensagem, registrar o pedido, abrir o
+    // WhatsApp) chega na Parte 3 — aqui só validamos e persistimos os
+    // dados do cliente para a próxima visita.
+    submitOrder() {
+        if (!this.canSubmitOrder) return;
+
+        if (this.saveDataConsent) {
+            this.$store.customer.save({
+                name: this.customerName,
+                phone: this.customerPhone,
+                address: this.orderType === 'delivery' ? this.address : this.$store.customer.data.address,
+            });
+        }
+
+        alert('Validado! O envio de verdade (WhatsApp) chega na Parte 3 do Sprint 4.');
     },
 }));
 
