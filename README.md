@@ -10,9 +10,9 @@
 |---|---|
 | Planejamento (Fases 1–10) | ✅ Concluído |
 | Sprint 1 — Fundação, multi-tenant, auth | ✅ Concluído e testado (9 testes automatizados) |
-| Sprint 2 — Painel do lojista | 🚧 Em andamento (Partes 1 e 2 de 4 entregues) |
-| Sprint 3 — Vitrine pública | ⏳ Não iniciado |
-| Sprint 4 — Carrinho e checkout | ⏳ Não iniciado |
+| Sprint 2 — Painel do lojista | ✅ Concluído e testado |
+| Sprint 3 — Vitrine pública | ✅ Concluído e testado |
+| Sprint 4 — Carrinho e checkout |  🚧 Em andamento |
 | Sprint 5 — Super admin e deploy | ⏳ Não iniciado |
 
 
