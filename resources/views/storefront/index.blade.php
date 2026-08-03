@@ -33,7 +33,10 @@
 <div x-data="storefront('{{ $categories->first()?->id }}')">
 
     <!-- Hero -->
-    <header class="relative h-48 bg-gradient-to-br from-primary to-primary/70">
+    <header class="relative h-48 overflow-hidden bg-gradient-to-br from-primary to-primary/70">
+        @if($store->banner_url)
+            <img src="{{ $store->banner_url }}" class="absolute inset-0 w-full h-full object-cover" alt="">
+        @endif
         <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
 
         <div class="relative h-full flex flex-col justify-between p-4">
@@ -50,12 +53,29 @@
                     </span>
                 @endif
 
-                @if($store->whatsapp_contact)
-                    <a href="https://wa.me/{{ $store->whatsapp_contact }}" target="_blank"
-                       class="w-9 h-9 rounded-full bg-white/95 flex items-center justify-center text-emerald-600">
-                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.35 5.07L2 22l5.06-1.33A9.94 9.94 0 0012 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18c-1.62 0-3.14-.44-4.44-1.2l-.32-.19-3.3.87.88-3.22-.21-.33A7.94 7.94 0 014 12c0-4.41 3.59-8 8-8s8 3.59 8 8-3.59 8-8 8z"/></svg>
-                    </a>
-                @endif
+                <div class="flex items-center gap-2">
+                    @if($store->instagram_url)
+                        @php
+                            // Aceita tanto "@handle" quanto uma URL completa —
+                            // o lojista não precisa saber montar o link certo.
+                            $instagramHandle = ltrim($store->instagram_url, '@');
+                            $instagramUrl = str_starts_with($instagramHandle, 'http')
+                                ? $instagramHandle
+                                : "https://instagram.com/{$instagramHandle}";
+                        @endphp
+                        <a href="{{ $instagramUrl }}" target="_blank"
+                           class="w-9 h-9 rounded-full bg-white/95 flex items-center justify-center text-pink-600">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.16c3.2 0 3.58.01 4.85.07 3.25.15 4.77 1.69 4.92 4.92.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.15 3.23-1.66 4.77-4.92 4.92-1.27.06-1.64.07-4.85.07s-3.58-.01-4.85-.07c-3.26-.15-4.77-1.7-4.92-4.92-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85C2.35 3.86 3.87 2.33 7.15 2.23 8.42 2.17 8.8 2.16 12 2.16zM12 0C8.74 0 8.33.01 7.05.07 2.7.27.27 2.69.07 7.05.01 8.33 0 8.74 0 12s.01 3.67.07 4.95c.2 4.36 2.62 6.78 6.98 6.98C8.33 23.99 8.74 24 12 24s3.67-.01 4.95-.07c4.35-.2 6.78-2.62 6.98-6.98.06-1.28.07-1.69.07-4.95s-.01-3.67-.07-4.95c-.2-4.35-2.62-6.78-6.98-6.98C15.67.01 15.26 0 12 0zm0 5.84A6.16 6.16 0 1018.16 12 6.16 6.16 0 0012 5.84zM12 16a4 4 0 110-8 4 4 0 010 8zm6.41-10.85a1.44 1.44 0 100 2.88 1.44 1.44 0 000-2.88z"/></svg>
+                        </a>
+                    @endif
+
+                    @if($store->whatsapp_contact)
+                        <a href="https://wa.me/{{ $store->whatsapp_contact }}" target="_blank"
+                           class="w-9 h-9 rounded-full bg-white/95 flex items-center justify-center text-emerald-600">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.35 5.07L2 22l5.06-1.33A9.94 9.94 0 0012 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18c-1.62 0-3.14-.44-4.44-1.2l-.32-.19-3.3.87.88-3.22-.21-.33A7.94 7.94 0 014 12c0-4.41 3.59-8 8-8s8 3.59 8 8-3.59 8-8 8z"/></svg>
+                        </a>
+                    @endif
+                </div>
             </div>
 
             <div class="flex items-end gap-3">

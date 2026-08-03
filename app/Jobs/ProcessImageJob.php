@@ -44,6 +44,13 @@ class ProcessImageJob implements ShouldQueue
     {
         TenantContext::set($this->tenantId);
 
+        // Fotos de celular (4000x3000px+) descomprimidas em memória pelo
+        // driver GD facilmente estouram o limite padrão do PHP (128MB) —
+        // aumentamos só para este Job, sem precisar mexer no php.ini do
+        // servidor (que varia por ambiente e teria que ser refeito a cada
+        // instalação nova do PHP).
+        ini_set('memory_limit', '256M');
+
         $model = $this->modelClass::findOrFail($this->modelId);
 
         // API do Intervention Image v4 (mudou da v3 há poucas semanas):

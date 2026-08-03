@@ -26,6 +26,10 @@ class StoreController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:150'],
             'description' => ['nullable', 'string'],
+            // Formato "R G B" espaçado (ex: "21 128 61") — mesmo padrão do
+            // default da migration (Fase 8). O front converte hex -> isso
+            // antes de enviar; aqui só validamos que o formato bate.
+            'primary_color' => ['required', 'regex:/^\d{1,3} \d{1,3} \d{1,3}$/'],
             'whatsapp_number' => ['required', 'string', 'max:20'],
             'whatsapp_contact' => ['nullable', 'string', 'max:20'],
             'instagram_url' => ['nullable', 'string', 'max:255'],

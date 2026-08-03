@@ -3,6 +3,7 @@
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\TenantIdentificationMiddleware;
 use App\Http\Middleware\TenantPanelScopeMiddleware;
+use App\Http\Middleware\VitrineCacheMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -40,7 +41,12 @@ return Application::configure(basePath: dirname(__DIR__))
             // Vitrine pública — Blade, identificação de tenant por host/slug.
             // Fica por ÚLTIMO sempre: a rota curinga /{slug} deve ser a
             // última tentativa de match do router, nunca a primeira.
-            Route::middleware(['web', 'tenant.identify'])
+            //
+            // 'vitrine.cache' vem ANTES de 'tenant.identify' de propósito
+            // (Sprint 3 Parte 3): a chave do cache usa o slug direto da URL,
+            // sem precisar identificar o tenant — em cache HIT, a requisição
+            // nunca chega a tocar o banco de dados.
+            Route::middleware(['web', 'vitrine.cache', 'tenant.identify'])
                 ->group(base_path('routes/storefront.php'));
         },
     )
@@ -48,6 +54,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'tenant.identify' => TenantIdentificationMiddleware::class,
             'tenant.panel' => TenantPanelScopeMiddleware::class,
+            'vitrine.cache' => VitrineCacheMiddleware::class,
         ]);
 
         // Declarados explicitamente para evitar ambiguidade: o padrão do

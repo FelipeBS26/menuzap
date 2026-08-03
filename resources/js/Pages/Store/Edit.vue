@@ -1,5 +1,6 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 import CurrencyInput from '@/components/CurrencyInput.vue';
 
 const props = defineProps({ store: Object });
@@ -7,6 +8,7 @@ const props = defineProps({ store: Object });
 const form = useForm({
     name: props.store.name,
     description: props.store.description ?? '',
+    primary_color: props.store.primary_color ?? '21 128 61',
     whatsapp_number: props.store.whatsapp_number,
     whatsapp_contact: props.store.whatsapp_contact ?? '',
     instagram_url: props.store.instagram_url ?? '',
@@ -20,11 +22,46 @@ const form = useForm({
     banner: null,
 });
 
+// O banco guarda "R G B" espaçado (ex: "21 128 61" — Fase 8), mas o
+// <input type="color"> nativo só entende hex (#15803D). Conversão só
+// acontece na entrada/saída — o formato salvo nunca muda.
+function rgbSpaceToHex(rgbSpace) {
+    const [r, g, b] = (rgbSpace || '21 128 61').split(' ').map(Number);
+    return '#' + [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('');
+}
+function hexToRgbSpace(hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `${r} ${g} ${b}`;
+}
+const primaryColorHex = computed({
+    get: () => rgbSpaceToHex(form.primary_color),
+    set: (hex) => (form.primary_color = hexToRgbSpace(hex)),
+});
+
+// Preview de logo/banner — mesmo padrão do formulário de produto.
+// Sem isso, não havia NENHUM feedback visual de que o upload funcionou.
+const logoPreview = ref(props.store.logo_url ?? null);
+const bannerPreview = ref(props.store.banner_url ?? null);
+
+function onLogoChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    form.logo = file;
+    logoPreview.value = URL.createObjectURL(file);
+}
+function onBannerChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    form.banner = file;
+    bannerPreview.value = URL.createObjectURL(file);
+}
+
 function submit() {
-    form.post(route('tenant.store.update'), {
+    form.transform((data) => ({ ...data, _method: 'put' })).post(route('tenant.store.update'), {
         forceFormData: true,
         preserveScroll: true,
-        transform: (data) => ({ ...data, _method: 'put' }),
     });
 }
 </script>
@@ -48,14 +85,43 @@ function submit() {
                 <textarea v-model="form.description" rows="2" class="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"></textarea>
             </div>
 
+            <div>
+                <label class="block text-xs text-zinc-600 mb-2">Cor da marca</label>
+                <div class="flex items-center gap-3">
+                    <input type="color" v-model="primaryColorHex" class="w-10 h-10 rounded-lg border border-zinc-300 cursor-pointer" />
+                    <span class="text-sm text-zinc-600">{{ primaryColorHex }}</span>
+                    <span class="text-xs text-zinc-400">Usada no hero e nos botões da vitrine</span>
+                </div>
+            </div>
+
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <label class="block text-xs text-zinc-600 mb-1">Logo</label>
-                    <input type="file" accept="image/*" @change="form.logo = $event.target.files[0]" class="text-sm" />
+                    <div v-if="logoPreview" class="relative w-24 h-24">
+                        <img :src="logoPreview" class="w-full h-full object-cover rounded-lg border border-zinc-200" />
+                        <label class="absolute -bottom-2 -right-2 bg-white text-[10px] px-2 py-1 rounded-md cursor-pointer border border-zinc-300 shadow-sm">
+                            Trocar
+                            <input type="file" accept="image/*" class="hidden" @change="onLogoChange" />
+                        </label>
+                    </div>
+                    <label v-else class="flex flex-col items-center justify-center gap-1 w-24 h-24 border-2 border-dashed border-zinc-300 rounded-lg cursor-pointer text-zinc-400 text-[10px] text-center px-1">
+                        Toque para adicionar
+                        <input type="file" accept="image/*" class="hidden" @change="onLogoChange" />
+                    </label>
                 </div>
                 <div>
                     <label class="block text-xs text-zinc-600 mb-1">Banner</label>
-                    <input type="file" accept="image/*" @change="form.banner = $event.target.files[0]" class="text-sm" />
+                    <div v-if="bannerPreview" class="relative w-full h-24">
+                        <img :src="bannerPreview" class="w-full h-full object-cover rounded-lg border border-zinc-200" />
+                        <label class="absolute bottom-2 right-2 bg-white text-[10px] px-2 py-1 rounded-md cursor-pointer border border-zinc-300 shadow-sm">
+                            Trocar
+                            <input type="file" accept="image/*" class="hidden" @change="onBannerChange" />
+                        </label>
+                    </div>
+                    <label v-else class="flex flex-col items-center justify-center gap-1 w-full h-24 border-2 border-dashed border-zinc-300 rounded-lg cursor-pointer text-zinc-400 text-xs">
+                        Toque para adicionar
+                        <input type="file" accept="image/*" class="hidden" @change="onBannerChange" />
+                    </label>
                 </div>
             </div>
         </div>
