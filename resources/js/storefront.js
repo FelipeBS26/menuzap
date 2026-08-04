@@ -1,5 +1,9 @@
 import Alpine from 'alpinejs';
 
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || '';
+}
+
 // Store global do carrinho — persistido em localStorage, 100% client-side
 // (Fase 4). Guarda IDs (produto, tamanho, seleções), não rótulos de texto —
 // os rótulos são calculados na hora de exibir, olhando o catálogo. Isso é
@@ -59,6 +63,44 @@ Alpine.store('customer', {
     },
 });
 
+// Fila offline-first (Fase 6): quando o POST /api/orders/log falha ou dá
+// timeout, o pedido já foi enviado pelo WhatsApp (a venda nunca espera o
+// nosso backend) — mas o registro fica pendente aqui, e tenta de novo
+// sozinho na próxima vez que o cliente abrir a loja, sem ação nenhuma dele.
+Alpine.store('pendingLogs', {
+    items: JSON.parse(localStorage.getItem('menuzap_pending_logs') || '[]'),
+
+    add(payload) {
+        this.items.push(payload);
+        this.persist();
+    },
+
+    remove(localId) {
+        this.items = this.items.filter((p) => p.localId !== localId);
+        this.persist();
+    },
+
+    persist() {
+        localStorage.setItem('menuzap_pending_logs', JSON.stringify(this.items));
+    },
+
+    async retryAll(tenantSlug) {
+        for (const payload of [...this.items]) {
+            try {
+                const { localId, ...body } = payload;
+                const res = await fetch(`/api/${tenantSlug}/orders/log`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+                    body: JSON.stringify(body),
+                });
+                if (res.ok) this.remove(localId);
+            } catch (e) {
+                // Continua tentando os próximos — um falhar não trava os outros.
+            }
+        }
+    },
+});
+
 Alpine.data('storefront', (initialCategoryId) => ({
     // ---------- Navegação ----------
     activeCategory: initialCategoryId,
@@ -75,6 +117,14 @@ Alpine.data('storefront', (initialCategoryId) => ({
             });
         });
         this.storeConfig = window.__STORE__ || this.storeConfig;
+        this.tenantSlug = window.__TENANT_SLUG__ || '';
+
+        // Retry silencioso — se sobrou algum pedido não confirmado de uma
+        // visita anterior (rede caiu no meio do POST), tenta de novo aqui,
+        // sem o cliente precisar fazer nada (fila offline-first, Fase 6).
+        if (this.$store.pendingLogs.items.length && this.tenantSlug) {
+            this.$store.pendingLogs.retryAll(this.tenantSlug);
+        }
     },
 
     // ---------- Modal de personalização ----------
@@ -299,6 +349,15 @@ Alpine.data('storefront', (initialCategoryId) => ({
         this.checkoutStep = 1;
     },
 
+    startNewOrder() {
+        this.orderType = null;
+        this.paymentMethod = '';
+        this.changeForInput = '';
+        this.lastOrderShortId = null;
+        this.checkoutStep = 0;
+        this.cartOpen = false;
+    },
+
     selectOrderType(type) {
         this.orderType = type;
         this.checkoutStep = 2;
@@ -336,11 +395,36 @@ Alpine.data('storefront', (initialCategoryId) => ({
         return true;
     },
 
-    // Envio de verdade (montar a mensagem, registrar o pedido, abrir o
-    // WhatsApp) chega na Parte 3 — aqui só validamos e persistimos os
-    // dados do cliente para a próxima visita.
-    submitOrder() {
-        if (!this.canSubmitOrder) return;
+    // Envio de verdade — a sequência obrigatória definida na Fase 6:
+    // (1) preflight de status → (2) registrar e receber o short_id →
+    // (3) montar a mensagem → (4) abrir o WhatsApp. Nenhuma etapa pode
+    // travar a venda: falhas de rede em qualquer ponto degradam
+    // graciosamente, nunca bloqueiam o clique final do cliente.
+    submitting: false,
+    lastOrderShortId: null,
+
+    async submitOrder() {
+        if (!this.canSubmitOrder || this.submitting) return;
+
+        this.submitting = true;
+
+        // (1) Preflight — confirma que a loja não fechou enquanto o
+        // cliente preenchia o checkout (Fase 7). Se falhar/der timeout,
+        // seguimos mesmo assim: a checagem é um bônus, não um bloqueio.
+        try {
+            const statusRes = await fetch(`/api/${this.tenantSlug}/store/status`, {
+                signal: AbortSignal.timeout(2500),
+            });
+            const status = await statusRes.json();
+            if (!status.is_open) {
+                this.submitting = false;
+                alert(status.message || 'A loja fechou enquanto você finalizava o pedido.');
+                this.checkoutStep = 0;
+                return;
+            }
+        } catch (e) {
+            // Preflight indisponível — não impede a venda.
+        }
 
         if (this.saveDataConsent) {
             this.$store.customer.save({
@@ -350,8 +434,129 @@ Alpine.data('storefront', (initialCategoryId) => ({
             });
         }
 
-        alert('Validado! O envio de verdade (WhatsApp) chega na Parte 3 do Sprint 4.');
+        const payload = this.buildOrderPayload();
+        const message = this.buildWhatsappMessage(payload);
+        payload.whatsapp_message = message;
+
+        let shortId = null;
+
+        // (2) Registro com timeout de 2.5s (Fase 6).
+        try {
+            const res = await fetch(`/api/${this.tenantSlug}/orders/log`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(2500),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                shortId = data.short_id;
+            }
+        } catch (e) {
+            // Timeout ou falha de rede — cai na degradação graciosa abaixo.
+        }
+
+        if (!shortId) {
+            // Degradação graciosa: gera um ID local, guarda o registro
+            // pendente para tentar de novo depois, e abre o WhatsApp de
+            // qualquer forma. A pizzaria recebe o pedido mesmo se a nossa
+            // infraestrutura falhar nesse segundo exato.
+            shortId = 'LOCAL-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+            this.$store.pendingLogs.add({ ...payload, localId: shortId });
+        }
+
+        // (3) Mensagem final, com o short_id (oficial ou local) embutido.
+        const finalMessage = message.replace('{{SHORT_ID}}', shortId);
+        window.open(`https://wa.me/${this.storeConfig.whatsappNumber}?text=${encodeURIComponent(finalMessage)}`, '_blank');
+
+        // (4) Limpa o carrinho e mostra a confirmação — o cliente nunca
+        // fica se perguntando se o clique funcionou (Fase 8).
+        this.$store.cart.clear();
+        this.lastOrderShortId = shortId;
+        this.checkoutStep = 3;
+        this.submitting = false;
     },
+
+    // Fonte única de verdade do pedido — o mesmo payload alimenta tanto o
+    // POST /api/orders/log quanto a mensagem do WhatsApp. Nunca duas
+    // funções paralelas montando o mesmo dado de formas diferentes (Fase 8).
+    buildOrderPayload() {
+        const items = this.$store.cart.items.map((item) => {
+            const display = this.cartItemDisplay(item);
+            return {
+                name: display.name,
+                size: display.sizeLabel,
+                options: display.optionsLabel,
+                notes: item.notes,
+                quantity: item.quantity,
+                unit_price_cents: item.unitPriceCents,
+            };
+        });
+
+        const payload = {
+            customer_name: this.customerName,
+            customer_phone: this.customerPhone || null,
+            order_type: this.orderType,
+            payment_method: this.paymentMethod,
+            total_cents: this.checkoutTotalCents,
+            items_snapshot: items,
+            address: { ...this.address },
+        };
+
+        // Cláusula de guarda (Fase 8): o endereço só viaja se o pedido for
+        // de entrega. x-show apenas esconde o campo visualmente — os dados
+        // continuam vivos no estado do Alpine por baixo, então essa remoção
+        // explícita é obrigatória, não redundante.
+        if (payload.order_type !== 'delivery') {
+            delete payload.address;
+        }
+
+        return payload;
+    },
+
+    buildWhatsappMessage(payload) {
+        const typeLabels = { delivery: 'Entrega', pickup: 'Retirada', dine_in: 'Consumo no local' };
+        const paymentLabels = { pix: 'Pix', cash: 'Dinheiro', debit: 'Cartão de débito', credit: 'Cartão de crédito' };
+
+        const lines = [];
+        lines.push('Olá! Gostaria de fazer este pedido.');
+        lines.push('Pedido #{{SHORT_ID}}');
+        lines.push('');
+        payload.items_snapshot.forEach((item) => {
+            let line = `${item.quantity}x ${item.name}`;
+            if (item.size) line += ` (${item.size})`;
+            lines.push(line);
+            if (item.options.length) lines.push(`  + ${item.options.join(', ')}`);
+            if (item.notes) lines.push(`  Obs: ${item.notes}`);
+        });
+        lines.push('');
+        lines.push(`Nome: ${payload.customer_name}`);
+        if (payload.customer_phone) lines.push(`Telefone: ${payload.customer_phone}`);
+        lines.push(`Tipo: ${typeLabels[payload.order_type]}`);
+
+        if (payload.address) {
+            const a = payload.address;
+            lines.push(`Endereço: ${a.street}, ${a.number} - ${a.neighborhood}`);
+            if (a.complement) lines.push(`Complemento: ${a.complement}`);
+            if (a.reference) lines.push(`Referência: ${a.reference}`);
+        }
+
+        lines.push(`Pagamento: ${paymentLabels[payload.payment_method]}`);
+        if (payload.payment_method === 'cash' && this.changeForCents > 0) {
+            lines.push(`Troco para ${this.formatPrice(this.changeForCents)} (levar ${this.formatPrice(this.changeAmountCents)})`);
+        }
+
+        lines.push('');
+        if (this.checkoutDeliveryFeeCents > 0) {
+            lines.push(`Taxa de entrega: ${this.formatPrice(this.checkoutDeliveryFeeCents)}`);
+        }
+        lines.push(`Total: ${this.formatPrice(payload.total_cents)}`);
+
+        return lines.join('\n');
+    },
+
+    // ---------- Início de sessão: retry silencioso de pedidos pendentes ----------
+    tenantSlug: '',
 }));
 
 window.Alpine = Alpine;

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $store->name }} — Cardápio</title>
 
     {{-- Catálogo completo embutido como JSON — o modal de personalização
@@ -10,6 +11,7 @@
          compatível com o cache Redis da Parte 3: o JSON fica estático
          dentro do HTML cacheado, junto com o resto da página. --}}
     <script>window.__CATALOG__ = @js($categories);</script>
+    <script>window.__TENANT_SLUG__ = @js($tenant->slug);</script>
     <script>
         window.__STORE__ = @js([
             'deliveryFeeCents' => $store->delivery_fee_cents,
@@ -18,6 +20,7 @@
             'acceptsPickup' => $store->accepts_pickup,
             'acceptsDineIn' => $store->accepts_dine_in,
             'paymentMethods' => $store->payment_methods,
+            'whatsappNumber' => $store->whatsapp_number,
         ]);
     </script>
 
@@ -323,16 +326,27 @@
         <div class="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[85vh] flex flex-col">
             <!-- Cabeçalho — muda por etapa -->
             <div class="flex items-center gap-2 px-4 py-3 border-b border-zinc-100 flex-shrink-0">
-                <button x-show="checkoutStep > 0" @click="checkoutStep === 1 ? backToCart() : backToType()" class="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 flex-shrink-0">‹</button>
+                <button x-show="checkoutStep > 0 && checkoutStep < 3" @click="checkoutStep === 1 ? backToCart() : backToType()" class="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 flex-shrink-0">‹</button>
                 <span class="text-sm font-semibold text-zinc-900 flex-1">
                     <span x-show="checkoutStep === 0">Seu carrinho · <span x-text="$store.cart.count"></span> ite<span x-text="$store.cart.count === 1 ? 'm' : 'ns'"></span></span>
                     <span x-show="checkoutStep === 1">Como você quer receber?</span>
                     <span x-show="checkoutStep === 2">Dados e pagamento</span>
+                    <span x-show="checkoutStep === 3">Pedido enviado</span>
                 </span>
-                <button @click="closeCart()" class="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 flex-shrink-0">✕</button>
+                <button x-show="checkoutStep < 3" @click="closeCart()" class="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 flex-shrink-0">✕</button>
             </div>
 
             <div class="overflow-y-auto flex-1 px-4 py-3">
+
+                <!-- Etapa 3: confirmação -->
+                <template x-if="checkoutStep === 3">
+                    <div class="flex flex-col items-center text-center py-10 px-4">
+                        <div class="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center text-2xl mb-4">✓</div>
+                        <p class="text-base font-semibold text-zinc-900 mb-1">Pedido enviado!</p>
+                        <p class="text-sm text-zinc-500 mb-1">Aguarde a confirmação do restaurante pelo WhatsApp.</p>
+                        <p class="text-xs text-zinc-400">Pedido <span class="font-medium" x-text="'#' + lastOrderShortId"></span></p>
+                    </div>
+                </template>
 
                 <!-- Etapa 0: lista do carrinho -->
                 <template x-if="checkoutStep === 0">
@@ -482,11 +496,17 @@
                 </template>
 
                 <template x-if="checkoutStep === 2">
-                    <button type="button" @click="submitOrder()" :disabled="!canSubmitOrder"
+                    <button type="button" @click="submitOrder()" :disabled="!canSubmitOrder || submitting"
                         class="w-full rounded-xl px-4 py-3 flex items-center justify-between text-sm font-medium transition-colors"
-                        :class="canSubmitOrder ? 'bg-primary text-white' : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'">
-                        <span>Enviar pedido pelo WhatsApp</span>
-                        <span x-show="canSubmitOrder" x-text="formatPrice(checkoutTotalCents)"></span>
+                        :class="(canSubmitOrder && !submitting) ? 'bg-primary text-white' : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'">
+                        <span x-text="submitting ? 'Enviando...' : 'Enviar pedido pelo WhatsApp'"></span>
+                        <span x-show="canSubmitOrder && !submitting" x-text="formatPrice(checkoutTotalCents)"></span>
+                    </button>
+                </template>
+
+                <template x-if="checkoutStep === 3">
+                    <button type="button" @click="startNewOrder()" class="w-full rounded-xl px-4 py-3 text-sm font-medium bg-primary text-white">
+                        Fazer novo pedido
                     </button>
                 </template>
             </div>

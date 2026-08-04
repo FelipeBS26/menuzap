@@ -31,12 +31,17 @@ return Application::configure(basePath: dirname(__DIR__))
             Route::middleware(['web', 'auth', 'tenant.panel', HandleInertiaRequests::class])
                 ->group(base_path('routes/tenant.php'));
 
-            // TODO Parte 4/Sprint 2: descomentar quando routes/admin.php e routes/api.php existirem.
-            // Ambos entram ANTES da vitrine, pelo mesmo motivo acima.
+            // API interna do Alpine.js (status da loja + registro de pedido).
+            // Prefixo /api/{slug}/... — o slug na URL é o que permite o
+            // TenantIdentificationMiddleware funcionar aqui exatamente como
+            // na vitrine, sem precisar de nenhum mecanismo novo (Sprint 4).
+            // 'web' é obrigatório para o CSRF funcionar nas chamadas fetch().
+            Route::middleware(['web', 'tenant.identify'])->prefix('api/{slug}')
+                ->group(base_path('routes/api.php'));
+
+            // TODO Sprint 5: descomentar quando routes/admin.php existir.
             // Route::middleware(['web', 'auth', 'role:super_admin'])->prefix('admin')
             //     ->group(base_path('routes/admin.php'));
-            // Route::middleware(['tenant.identify'])->prefix('api')
-            //     ->group(base_path('routes/api.php'));
 
             // Vitrine pública — Blade, identificação de tenant por host/slug.
             // Fica por ÚLTIMO sempre: a rota curinga /{slug} deve ser a
